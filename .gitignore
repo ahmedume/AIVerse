@@ -1,0 +1,27 @@
+# ---- Python / uv ----
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---- Node ----
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# ---- Environment (secrets — never commit) ----
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ---- Runtime data ----
+backend/data/
+
+# ---- OS / editors ----
+.DS_Store
+Thumbs.db
+*.log

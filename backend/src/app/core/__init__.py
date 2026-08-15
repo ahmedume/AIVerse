@@ -1,0 +1,1 @@
+# Core infrastructure: settings, database engine, exceptions, LLM factory (later).
