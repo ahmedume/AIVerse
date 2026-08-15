@@ -28,8 +28,8 @@ class NotFoundError(AppError):
 
 
 class ValidationError(AppError):
-    def __init__(self, message: str = "Invalid input") -> None:
-        super().__init__(message, "VALIDATION_ERROR")
+    def __init__(self, message: str = "Invalid input", code: str = "VALIDATION_ERROR") -> None:
+        super().__init__(message, code)
 
 
 class AuthorizationError(AppError):

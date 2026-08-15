@@ -5,6 +5,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from time import perf_counter
 
 import structlog
 from fastapi import FastAPI, Request
@@ -16,9 +17,12 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
-from app.routers.auth_router import limiter as auth_limiter
+from app.core.rate_limit import limiter
 from app.routers.auth_router import router as auth_router
+from app.routers.chat_router import router as chat_router
+from app.routers.documents_router import router as documents_router
 from app.routers.health_router import router as health_router
+from app.routers.templates_router import router as templates_router
 
 settings = get_settings()
 logger = structlog.get_logger()
@@ -67,6 +71,34 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+class RequestLoggingMiddleware:
+    """Pure ASGI middleware: structlog access log for HTTP requests."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        start = perf_counter()
+
+        async def send_wrapper(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                duration_ms = round((perf_counter() - start) * 1000, 1)
+                logger.info(
+                    "http.request",
+                    method=scope.get("method"),
+                    path=scope.get("path"),
+                    status=message["status"],
+                    duration_ms=duration_ms,
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
 def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=429,
@@ -98,14 +130,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RequestLoggingMiddleware)
 
-    app.state.limiter = auth_limiter
+    app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
     register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(chat_router)
+    app.include_router(documents_router)
+    app.include_router(templates_router)
     return app
 
 

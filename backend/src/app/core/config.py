@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     AUTH_RATE_LIMIT: str = "5/minute"
     REFRESH_RATE_LIMIT: str = "10/minute"
+    CHAT_RATE_LIMIT: str = "20/minute"
+    DOCUMENT_RATE_LIMIT: str = "10/hour"
+    MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
     COOKIE_NAME_ACCESS: str = "nexus_access"
     COOKIE_NAME_REFRESH: str = "nexus_refresh"
 

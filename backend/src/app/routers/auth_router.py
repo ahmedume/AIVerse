@@ -4,12 +4,11 @@
 
 import structlog
 from fastapi import APIRouter, Depends, Request, Response
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.core.config import get_settings
 from app.core.database import SessionDep
 from app.core.exceptions import AuthorizationError
+from app.core.rate_limit import limiter
 from app.core.security import clear_auth_cookies
 from app.dependencies import get_current_user
 from app.models.user_model import User
@@ -19,8 +18,6 @@ from app.services import auth_service
 
 settings = get_settings()
 logger = structlog.get_logger()
-
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

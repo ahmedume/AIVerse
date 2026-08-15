@@ -23,6 +23,7 @@ async def get_current_user(request: Request, session: SessionDep) -> User:
     user = await user_repo.get_by_id(session, user_id)
     if user is None or not user.is_active:
         raise AuthorizationError("Account is not active", "UNAUTHORIZED")
+    request.state.current_user_id = user.id
     return user
 
 

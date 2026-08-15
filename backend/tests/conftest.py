@@ -4,11 +4,17 @@
 # Exports: db_engine, client (fixtures)
 
 import os
+import tempfile
+from pathlib import Path
 
 os.environ["APP_ENV"] = "development"
 os.environ["SECRET_KEY"] = "test-secret-key-0123456789abcdef-0123456789"
 os.environ["AUTH_RATE_LIMIT"] = "1000/minute"
 os.environ["REFRESH_RATE_LIMIT"] = "1000/minute"
+os.environ["CHAT_RATE_LIMIT"] = "1000/minute"
+os.environ["DOCUMENT_RATE_LIMIT"] = "1000/hour"
+os.environ["MAX_UPLOAD_BYTES"] = "2048"
+os.environ["DATA_DIR"] = str(Path(tempfile.gettempdir()) / "nexus-tests-data")
 os.environ["CORS_ORIGINS"] = "http://localhost:3000"
 
 import pytest  # noqa: E402
