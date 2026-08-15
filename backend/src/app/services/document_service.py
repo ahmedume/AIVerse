@@ -8,6 +8,7 @@ from io import BytesIO
 from pathlib import Path
 
 import anyio
+import openai
 import structlog
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
@@ -117,10 +118,17 @@ async def ingest_document(
                 document_id=document.id,
                 error=exc.message,
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("document.ingest_failed", document_id=document.id)
+            if isinstance(exc, openai.OpenAIError):
+                error = (
+                    "Embedding provider unavailable. Check EMBEDDING_PROVIDER "
+                    "and its API key in .env"
+                )
+            else:
+                error = "Ingestion failed"
             await document_repo.set_status(
-                session, document, status="failed", error="Ingestion failed"
+                session, document, status="failed", error=error
             )
             await session.commit()
 
