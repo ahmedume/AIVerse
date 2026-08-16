@@ -176,6 +176,12 @@ async def chat(
                 "message": "The AI provider is rate-limited right now. "
                 "Wait a moment and try again.",
             })
+        except openai.OpenAIError:
+            logger.exception("chat.model_error", user_id=current_user.id)
+            yield _sse("error", {
+                "code": "MODEL_ERROR",
+                "message": "The AI provider returned an error. Check its configuration.",
+            })
         except Exception:
             logger.exception("chat.stream_failed", user_id=current_user.id)
             yield _sse("error", {"code": "INTERNAL_ERROR",

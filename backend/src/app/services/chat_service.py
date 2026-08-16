@@ -1,17 +1,19 @@
 # src/app/services/chat_service.py
-# Purpose: chat orchestration — conversation resolution, rag retrieval,
-#          textgen template rendering, SSE token streaming (astream_events v3),
-#          persistence on done, abort-safe on disconnect.
+# Purpose: chat orchestration — conversation resolution, graph-driven SSE streaming
+#          (custom events: token / sources / tool_start / tool_end), persistence.
 # Exports: chat_events
 
 from collections.abc import AsyncIterator
 
 import structlog
 from fastapi import Request
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langgraph.errors import GraphRecursionError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import llm, vector_store
+from app.agents.graph import AGENT_GRAPH, RECURSION_LIMIT
+from app.agents.types import AgentContext
+from app.core import vector_store
 from app.core.config import get_settings
 from app.core.exceptions import AppError, ForbiddenError, ValidationError
 from app.models.conversation_model import utcnow
@@ -19,29 +21,16 @@ from app.models.template_model import Template
 from app.models.user_model import User
 from app.repositories import conversation_repo, template_repo, user_repo
 from app.schemas.conversation_schema import ChatIn
-from app.schemas.template_schema import TEMPLATE_PLACEHOLDER
 
 settings = get_settings()
 logger = structlog.get_logger()
 
 AUTO_TITLE_LENGTH = 50
 DEFAULT_TEMPERATURE = 0.7
-RAG_TOP_K = 4
-RAG_SYSTEM_PROMPT = (
-    "You are Nexus, an assistant that answers using the provided context. "
-    "Ground your answer in the context and cite filenames. "
-    "If the context does not answer the question, say you don't know."
-)
 
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
-
-
-async def _retrieve(user_id: str, query: str, top_k: int = RAG_TOP_K) -> list[dict[str, object]]:
-    embeddings = llm.get_embeddings()
-    query_vector = await embeddings.aembed_query(query)
-    return vector_store.search(user_id, query_vector, top_k)
 
 
 async def chat_events(
@@ -50,20 +39,17 @@ async def chat_events(
     user: User,
     payload: ChatIn,
 ) -> AsyncIterator[tuple[str, object]]:
-    """Yield (event_name, data) tuples for the SSE protocol: meta, token, done, error."""
+    """Yield (event_name, data) tuples for the SSE protocol: meta, token, sources,
+    tool_start, tool_end, done, error."""
 
     if not payload.regenerate and not payload.message.strip():
         raise ValidationError("Message is required")
 
+    template: Template | None = None
     if payload.conversation_id:
         conversation = await conversation_repo.get_owned(session, payload.conversation_id, user.id)
         if conversation is None:
             raise ForbiddenError("Conversation not found")
-        if conversation.agent_type == "agent":
-            raise AppError(
-                "This conversation mode is not supported yet", "AGENT_TYPE_NOT_SUPPORTED"
-            )
-        template: Template | None = None
         if conversation.agent_type == "textgen":
             if not payload.template_id:
                 raise ValidationError("template_id is required for textgen mode")
@@ -110,25 +96,10 @@ async def chat_events(
             prompt.append(AIMessage(content=message.content))
     prompt.append(HumanMessage(content=input_message.content))
 
-    system_prompt: str | None = None
-    sources: list[dict[str, object]] = []
-    if conversation.agent_type == "rag":
-        sources = await _retrieve(user.id, input_message.content)
-        if not sources:
-            raise AppError(
-                "No documents are indexed yet. Upload a document first.", "NO_DOCUMENTS"
-            )
-        context = "\n\n".join(
-            f"[{index}] {source['excerpt']}"
-            for index, source in enumerate(sources, start=1)
+    if conversation.agent_type == "rag" and not vector_store.has_vectors(user.id):
+        raise AppError(
+            "No documents are indexed yet. Upload a document first.", "NO_DOCUMENTS"
         )
-        system_prompt = f"{RAG_SYSTEM_PROMPT}\n\nContext:\n{context}"
-    elif conversation.agent_type == "textgen" and template is not None:
-        system_prompt = template.content.replace(
-            TEMPLATE_PLACEHOLDER, input_message.content
-        )
-    if system_prompt is not None:
-        prompt.insert(0, SystemMessage(content=system_prompt))
 
     yield ("meta", {
         "conversation_id": conversation.id,
@@ -136,27 +107,56 @@ async def chat_events(
         "provider": provider,
         "model": model_name,
     })
-    if sources:
-        yield ("sources", sources)
 
     user_settings = await user_repo.get_settings(session, user.id)
-    temperature = user_settings.temperature if user_settings else DEFAULT_TEMPERATURE
-    chat_model = llm.get_chat_model(provider, model_name, temperature)
+    context = AgentContext(
+        user_id=user.id,
+        provider=provider,
+        model=model_name,
+        agent_type=conversation.agent_type,
+        temperature=user_settings.temperature if user_settings else DEFAULT_TEMPERATURE,
+        template_content=template.content if template else None,
+    )
 
     content = ""
-    stream = await chat_model.astream_events(prompt, version="v3")
-    async for event in stream:
-        if event["event"] != "on_chat_model_stream":
-            continue
-        chunk = event["data"]["chunk"]
-        text = chunk.content if isinstance(chunk.content, str) else ""
-        if not text:
-            continue
-        content += text
-        if await request.is_disconnected():
-            logger.info("chat.aborted", user_id=user.id, conversation_id=conversation.id)
-            return
-        yield ("token", {"text": text})
+    try:
+        stream = AGENT_GRAPH.astream(
+            {"messages": prompt, "iterations": 0, "final": False, "source_chunks": []},
+            {"recursion_limit": RECURSION_LIMIT},
+            context=context,
+            stream_mode="custom",
+        )
+        async for part in stream:
+            kind = part.get("kind")
+            if kind == "token":
+                text = part["text"]
+                content += text
+                if await request.is_disconnected():
+                    logger.info("chat.aborted", user_id=user.id,
+                                conversation_id=conversation.id)
+                    return
+                yield ("token", {"text": text})
+            elif kind == "sources":
+                yield ("sources", part["sources"])
+            elif kind == "tool_start":
+                content = ""
+                yield ("tool_start", {
+                    "tool": part["tool"],
+                    "tool_call_id": part.get("tool_call_id"),
+                })
+            elif kind == "tool_end":
+                yield ("tool_end", {
+                    "tool": part["tool"],
+                    "tool_call_id": part.get("tool_call_id"),
+                })
+    except GraphRecursionError:
+        logger.warning("chat.agent_loop_limit", user_id=user.id,
+                       conversation_id=conversation.id)
+        yield ("error", {
+            "code": "AGENT_LOOP_LIMIT",
+            "message": "The agent hit its loop limit. Try a simpler question.",
+        })
+        return
 
     conversation.updated_at = utcnow()
     assistant = await conversation_repo.add_message(
