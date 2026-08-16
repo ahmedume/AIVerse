@@ -9,6 +9,7 @@ import openai
 import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
+from google.genai import errors as genai_errors
 
 from app.core.config import get_settings
 from app.core.database import SessionDep
@@ -177,6 +178,12 @@ async def chat(
                 "Wait a moment and try again.",
             })
         except openai.OpenAIError:
+            logger.exception("chat.model_error", user_id=current_user.id)
+            yield _sse("error", {
+                "code": "MODEL_ERROR",
+                "message": "The AI provider returned an error. Check its configuration.",
+            })
+        except genai_errors.APIError:
             logger.exception("chat.model_error", user_id=current_user.id)
             yield _sse("error", {
                 "code": "MODEL_ERROR",
