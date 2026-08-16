@@ -49,7 +49,7 @@ class FlakyModel:
     def __init__(self, error: Exception) -> None:
         self.error = error
 
-    async def astream_events(self, messages, version):  # noqa: ARG002
+    def astream(self, messages):  # noqa: ARG002
         raise self.error
 
 
@@ -60,24 +60,18 @@ class StreamingModel:
     def bind_tools(self, tools):  # noqa: ARG002
         return self
 
-    async def astream_events(self, messages, version):  # noqa: ARG002
+    def astream(self, messages):  # noqa: ARG002
         async def gen():
-            yield {
-                "event": "on_chat_model_stream",
-                "data": {"chunk": AIMessageChunk(content=self.text)},
-            }
+            yield AIMessageChunk(content=self.text)
         return gen()
 
 
 class DiesMidStreamModel:
     """Yields one token, then fails — mid-stream failures must NOT fall back."""
 
-    async def astream_events(self, messages, version):  # noqa: ARG002
+    def astream(self, messages):  # noqa: ARG002
         async def gen():
-            yield {
-                "event": "on_chat_model_stream",
-                "data": {"chunk": AIMessageChunk(content="partial ")},
-            }
+            yield AIMessageChunk(content="partial ")
             raise rate_limit_error()
         return gen()
 

@@ -41,18 +41,15 @@ class FakeAgentModel:
     def bind_tools(self, tools):  # noqa: ARG002
         return self
 
-    async def astream_events(self, messages, version):  # noqa: ARG002
+    def astream(self, messages):
         self.prompt = messages
         turn = self.script.pop(0)
 
         async def gen():
-            yield {
-                "event": "on_chat_model_stream",
-                "data": {"chunk": AIMessageChunk(
-                    content=turn["content"],
-                    tool_call_chunks=turn.get("tool_call_chunks", []),
-                )},
-            }
+            yield AIMessageChunk(
+                content=turn["content"],
+                tool_call_chunks=turn.get("tool_call_chunks", []),
+            )
         return gen()
 
 

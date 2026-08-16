@@ -39,7 +39,9 @@ def _merge_tool_call_chunks(chunks: list[dict[str, str]]) -> list[dict[str, obje
     """Reassemble streamed tool_call_chunks (indexed fragments) into tool_calls."""
     merged: dict[int, dict[str, str]] = {}
     for chunk in chunks:
-        entry = merged.setdefault(int(chunk.get("index", 0)), {"name": "", "args": "", "id": ""})
+        index = chunk.get("index")
+        entry = merged.setdefault(int(index) if index is not None else 0,
+                                  {"name": "", "args": "", "id": ""})
         entry["name"] += chunk.get("name") or ""
         entry["args"] += chunk.get("args") or ""
         entry["id"] += chunk.get("id") or ""
@@ -53,6 +55,20 @@ def _merge_tool_call_chunks(chunks: list[dict[str, str]]) -> list[dict[str, obje
     return calls
 
 
+def _chunk_text(chunk: Any) -> str:
+    """Extract text from an AIMessageChunk: plain string or content-block list."""
+    content = chunk.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return ""
+
+
 async def _invoke_model(
     context: AgentContext,
     messages: Sequence[BaseMessage],
@@ -61,6 +77,8 @@ async def _invoke_model(
 ) -> tuple[str, list[dict[str, str]]]:
     """Stream model output as `token` custom events; return (content, tool chunks).
 
+    Uses the provider-agnostic Runnable.astream so every provider (OpenAI-compatible,
+    Gemini, Anthropic, Ollama) streams content and tool_call_chunks uniformly.
     Tries each configured provider in the fallback chain: if a candidate fails
     before any token was streamed (rate limit, auth, connection), the next
     candidate is tried. Failures after streaming start are re-raised."""
@@ -76,12 +94,8 @@ async def _invoke_model(
         tool_chunks: list[dict[str, str]] = []
         streamed = False
         try:
-            stream = await model.astream_events(messages, version="v3")
-            async for event in stream:
-                if event["event"] != "on_chat_model_stream":
-                    continue
-                chunk = event["data"]["chunk"]
-                text = chunk.content if isinstance(chunk.content, str) else ""
+            async for chunk in model.astream(messages):
+                text = _chunk_text(chunk)
                 if text:
                     streamed = True
                     content += text

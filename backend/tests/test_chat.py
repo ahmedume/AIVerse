@@ -17,14 +17,11 @@ class FakeModel:
         self.tokens = tokens
         self.prompt: list | None = None
 
-    async def astream_events(self, messages: list, version: str):  # noqa: ARG002
+    def astream(self, messages: list):  # noqa: ARG002
         self.prompt = messages
         async def gen():
             for token in self.tokens:
-                yield {
-                    "event": "on_chat_model_stream",
-                    "data": {"chunk": SimpleNamespace(content=token)},
-                }
+                yield SimpleNamespace(content=token)
         return gen()
 
 
