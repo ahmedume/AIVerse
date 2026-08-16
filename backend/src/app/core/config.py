@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     DEFAULT_PROVIDER: str = "zen"
     DEFAULT_MODEL: str = "deepseek-v4-flash-free"
 
+    # Fallback (used when the requested provider is unconfigured or fails pre-stream)
+    FALLBACK_PROVIDER: str = ""
+    FALLBACK_MODEL: str = ""
+
     # Embeddings
     EMBEDDING_PROVIDER: str = "zen"
     EMBEDDING_MODEL: str = "text-embedding-3-small"

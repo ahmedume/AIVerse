@@ -50,6 +50,25 @@ def get_chat_model(provider: str, model: str, temperature: float = 0.7) -> BaseC
     raise AppError(f"Unknown provider '{provider}'", "UNKNOWN_PROVIDER")
 
 
+def get_model_chain(
+    provider: str, model: str, temperature: float = 0.7
+) -> list[BaseChatModel]:
+    """Ordered candidate models: requested provider first, then the configured
+    fallback provider. Unconfigured providers are skipped; empty means none usable."""
+    if provider not in SUPPORTED_PROVIDERS:
+        raise AppError(f"Unknown provider '{provider}'", "UNKNOWN_PROVIDER")
+    chain: list[BaseChatModel] = []
+    fallback = settings.FALLBACK_PROVIDER
+    if fallback and fallback != provider and settings.FALLBACK_MODEL:
+        candidates = [(provider, model), (fallback, settings.FALLBACK_MODEL)]
+    else:
+        candidates = [(provider, model)]
+    for candidate_provider, candidate_model in candidates:
+        if settings.provider_configured(candidate_provider):
+            chain.append(get_chat_model(candidate_provider, candidate_model, temperature))
+    return chain
+
+
 def get_embeddings() -> Embeddings:
     provider = settings.EMBEDDING_PROVIDER
     if provider in ("zen", "openai"):

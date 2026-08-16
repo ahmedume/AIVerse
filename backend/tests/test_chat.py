@@ -235,9 +235,12 @@ async def test_chat_foreign_conversation_forbidden(client: AsyncClient, monkeypa
     assert events[-1][1]["code"] == "FORBIDDEN"
 
 
-async def test_chat_provider_not_configured(client: AsyncClient) -> None:
+async def test_chat_provider_not_configured(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     await register_user(client, "noprov@example.com")
     conversation_id = await create_conversation(client, provider="openai")
+    monkeypatch.setattr(llm.settings, "FALLBACK_PROVIDER", "")
     response = await client.post("/chat", json={"conversation_id": conversation_id,
                                                 "message": "hi"})
     events = parse_sse(response.text)

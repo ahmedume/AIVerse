@@ -7,7 +7,6 @@ import json
 from collections.abc import Sequence
 from typing import Any, cast
 
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -22,7 +21,7 @@ from langgraph.runtime import Runtime
 from app.agents.tools import current_datetime, search_documents
 from app.agents.types import AgentContext, AgentState
 from app.core import llm, vector_store
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, ProviderNotConfiguredError
 from app.schemas.template_schema import TEMPLATE_PLACEHOLDER
 
 RAG_TOP_K = 4
@@ -54,28 +53,49 @@ def _merge_tool_call_chunks(chunks: list[dict[str, str]]) -> list[dict[str, obje
     return calls
 
 
-def _chat_model(context: AgentContext) -> BaseChatModel:
-    return llm.get_chat_model(context.provider, context.model, context.temperature)
-
-
 async def _invoke_model(
-    model: Runnable[Any, AIMessage], messages: Sequence[BaseMessage]
+    context: AgentContext,
+    messages: Sequence[BaseMessage],
+    *,
+    bind_tools: bool = False,
 ) -> tuple[str, list[dict[str, str]]]:
-    """Stream model output as `token` custom events; return (content, tool chunks)."""
-    content = ""
-    tool_chunks: list[dict[str, str]] = []
-    stream = await model.astream_events(messages, version="v3")
-    async for event in stream:
-        if event["event"] != "on_chat_model_stream":
-            continue
-        chunk = event["data"]["chunk"]
-        text = chunk.content if isinstance(chunk.content, str) else ""
-        if text:
-            content += text
-            get_stream_writer()({"kind": "token", "text": text})
-        for piece in getattr(chunk, "tool_call_chunks", None) or []:
-            tool_chunks.append(piece)
-    return content, tool_chunks
+    """Stream model output as `token` custom events; return (content, tool chunks).
+
+    Tries each configured provider in the fallback chain: if a candidate fails
+    before any token was streamed (rate limit, auth, connection), the next
+    candidate is tried. Failures after streaming start are re-raised."""
+    chain = llm.get_model_chain(context.provider, context.model, context.temperature)
+    if not chain:
+        raise ProviderNotConfiguredError(context.provider)
+    last_error: Exception | None = None
+    for candidate in chain:
+        model: Runnable[Any, AIMessage] = candidate
+        if bind_tools:
+            model = candidate.bind_tools([search_documents, current_datetime])
+        content = ""
+        tool_chunks: list[dict[str, str]] = []
+        streamed = False
+        try:
+            stream = await model.astream_events(messages, version="v3")
+            async for event in stream:
+                if event["event"] != "on_chat_model_stream":
+                    continue
+                chunk = event["data"]["chunk"]
+                text = chunk.content if isinstance(chunk.content, str) else ""
+                if text:
+                    streamed = True
+                    content += text
+                    get_stream_writer()({"kind": "token", "text": text})
+                for piece in getattr(chunk, "tool_call_chunks", None) or []:
+                    tool_chunks.append(piece)
+            return content, tool_chunks
+        except Exception as exc:  # noqa: BLE001 - retry chain with the fallback provider
+            if last_error is None:
+                last_error = exc
+            if streamed:
+                raise
+    assert last_error is not None
+    raise last_error
 
 
 async def chat_node(state: AgentState, runtime: Runtime[AgentContext]) -> dict[str, object]:
@@ -96,7 +116,7 @@ async def chat_node(state: AgentState, runtime: Runtime[AgentContext]) -> dict[s
         system_prompt = f"{RAG_SYSTEM_PROMPT}\n\nContext:\n{context_block}"
     if system_prompt:
         messages = [SystemMessage(content=system_prompt), *messages]
-    content, _ = await _invoke_model(_chat_model(context), messages)
+    content, _ = await _invoke_model(context, messages)
     return {"messages": [AIMessage(content=content)]}
 
 
@@ -128,8 +148,9 @@ async def retrieve_node(state: AgentState, runtime: Runtime[AgentContext]) -> di
 async def agent_node(state: AgentState, runtime: Runtime[AgentContext]) -> dict[str, object]:
     """Agent turn: model with bound tools; returns updates, never mutates state."""
     context = runtime.context
-    model = _chat_model(context).bind_tools([search_documents, current_datetime])
-    content, tool_chunks = await _invoke_model(model, list(state["messages"]))
+    content, tool_chunks = await _invoke_model(
+        context, list(state["messages"]), bind_tools=True
+    )
     tool_calls = _merge_tool_call_chunks(tool_chunks)
     iterations = state["iterations"] + 1
     keep_going = bool(tool_calls) and iterations < MAX_AGENT_ITERATIONS
