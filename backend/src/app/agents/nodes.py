@@ -3,6 +3,7 @@
 #          Nodes emit `custom` stream events: token, sources, tool_start, tool_end.
 # Exports: chat_node, retrieve_node, agent_node, tools_executor
 
+import asyncio
 import json
 from collections.abc import Sequence
 from typing import Any, cast
@@ -25,6 +26,7 @@ from app.core.exceptions import AppError, ProviderNotConfiguredError
 from app.schemas.template_schema import TEMPLATE_PLACEHOLDER
 
 RAG_TOP_K = 4
+MODEL_TIMEOUT_SECONDS = 90
 RAG_SYSTEM_PROMPT = (
     "You are Nexus, an assistant that answers using the provided context. "
     "Ground your answer in the context and cite filenames. "
@@ -94,14 +96,15 @@ async def _invoke_model(
         tool_chunks: list[dict[str, str]] = []
         streamed = False
         try:
-            async for chunk in model.astream(messages):
-                text = _chunk_text(chunk)
-                if text:
-                    streamed = True
-                    content += text
-                    get_stream_writer()({"kind": "token", "text": text})
-                for piece in getattr(chunk, "tool_call_chunks", None) or []:
-                    tool_chunks.append(piece)
+            async with asyncio.timeout(MODEL_TIMEOUT_SECONDS):
+                async for chunk in model.astream(messages):
+                    text = _chunk_text(chunk)
+                    if text:
+                        streamed = True
+                        content += text
+                        get_stream_writer()({"kind": "token", "text": text})
+                    for piece in getattr(chunk, "tool_call_chunks", None) or []:
+                        tool_chunks.append(piece)
             return content, tool_chunks
         except Exception as exc:  # noqa: BLE001 - retry chain with the fallback provider
             if last_error is None:
@@ -124,7 +127,7 @@ async def chat_node(state: AgentState, runtime: Runtime[AgentContext]) -> dict[s
         )
     elif context.agent_type == "rag" and state["source_chunks"]:
         context_block = "\n\n".join(
-            f"[{index}] {source['excerpt']}"
+            f"[{index}] {source.get('text') or source['excerpt']}"
             for index, source in enumerate(state["source_chunks"], start=1)
         )
         system_prompt = f"{RAG_SYSTEM_PROMPT}\n\nContext:\n{context_block}"
@@ -140,7 +143,8 @@ async def retrieve_node(state: AgentState, runtime: Runtime[AgentContext]) -> di
     last = state["messages"][-1]
     query = cast(str, last.content) if isinstance(last, HumanMessage) else ""
     embeddings = llm.get_embeddings()
-    query_vector = await embeddings.aembed_query(query)
+    async with asyncio.timeout(MODEL_TIMEOUT_SECONDS):
+        query_vector = await embeddings.aembed_query(query)
     results = vector_store.search(context.user_id, query_vector, RAG_TOP_K)
     if not results:
         raise AppError(
@@ -152,6 +156,7 @@ async def retrieve_node(state: AgentState, runtime: Runtime[AgentContext]) -> di
             "filename": result["filename"],
             "score": result["score"],
             "excerpt": result["excerpt"],
+            "text": result["text"],
         }
         for result in results
     ]

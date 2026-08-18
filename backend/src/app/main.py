@@ -1,6 +1,6 @@
 # src/app/main.py
-# Purpose: FastAPI application factory — CORS, security headers, exception handlers,
-#          slowapi rate limiting, routers, lifespan.
+# Purpose: FastAPI application factory — CORS, security headers, request logging,
+#          exception handlers, routers, lifespan.
 # Exports: app
 
 from collections.abc import AsyncIterator
@@ -10,19 +10,10 @@ from time import perf_counter
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
-from app.core.rate_limit import limiter
-from app.routers.auth_router import router as auth_router
-from app.routers.chat_router import router as chat_router
-from app.routers.documents_router import router as documents_router
-from app.routers.health_router import router as health_router
-from app.routers.templates_router import router as templates_router
 
 settings = get_settings()
 logger = structlog.get_logger()
@@ -30,12 +21,11 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    data_dir = settings.data_dir_path / "uploads"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    (settings.data_dir_path / "vectorstore").mkdir(parents=True, exist_ok=True)
-    logger.info("nexus api starting", env=settings.APP_ENV)
+    settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+    settings.vectorstore_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("aiverse api starting", env=settings.APP_ENV)
     yield
-    logger.info("nexus api stopped")
+    logger.info("aiverse api stopped")
 
 
 class SecurityHeadersMiddleware:
@@ -46,7 +36,6 @@ class SecurityHeadersMiddleware:
         (b"X-Content-Type-Options", b"nosniff"),
         (b"X-Frame-Options", b"DENY"),
         (b"Referrer-Policy", b"strict-origin-when-cross-origin"),
-        (b"X-XSS-Protection", b"1; mode=block"),
         (b"Permissions-Policy", b"geolocation=(), microphone=(), camera=()"),
     )
 
@@ -86,28 +75,16 @@ class RequestLoggingMiddleware:
 
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
-                duration_ms = round((perf_counter() - start) * 1000, 1)
                 logger.info(
                     "http.request",
                     method=scope.get("method"),
                     path=scope.get("path"),
                     status=message["status"],
-                    duration_ms=duration_ms,
+                    duration_ms=round((perf_counter() - start) * 1000, 1),
                 )
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
-
-
-def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
-    return JSONResponse(
-        status_code=429,
-        content={
-            "success": False,
-            "error": {"code": "RATE_LIMITED", "message": "Too many requests. Wait and try again."},
-        },
-        headers={"Retry-After": "60"},
-    )
 
 
 def create_app() -> FastAPI:
@@ -121,7 +98,7 @@ def create_app() -> FastAPI:
         ]
     )
 
-    app = FastAPI(title="Nexus API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="AIverse API", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -132,16 +109,25 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
 
-    app.state.limiter = limiter
-    app.add_middleware(SlowAPIMiddleware)
-    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
-
     register_exception_handlers(app)
-    app.include_router(health_router)
-    app.include_router(auth_router)
-    app.include_router(chat_router)
-    app.include_router(documents_router)
-    app.include_router(templates_router)
+
+    from app.routers import (
+        chat_router,
+        detect_router,
+        export_router,
+        files_router,
+        health_router,
+        humanize_router,
+        plagiarism_router,
+    )
+
+    app.include_router(health_router.router)
+    app.include_router(files_router.router)
+    app.include_router(detect_router.router)
+    app.include_router(plagiarism_router.router)
+    app.include_router(humanize_router.router)
+    app.include_router(export_router.router)
+    app.include_router(chat_router.router)
     return app
 
 

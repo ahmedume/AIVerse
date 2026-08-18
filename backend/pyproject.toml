@@ -1,15 +1,10 @@
 [project]
-name = "nexus-api"
+name = "aiverse-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "AIverse - self-hosted AI-content detection and humanization toolkit"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiosqlite>=0.22.1",
-    "alembic>=1.19.1",
-    "asyncpg>=0.31.0",
-    "bcrypt==4.0.1",
-    "email-validator>=2.3.0",
     "faiss-cpu>=1.15.0",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
@@ -23,13 +18,11 @@ dependencies = [
     "langchain-text-splitters>=1.1.2",
     "langgraph>=1.2.11",
     "openai>=3.0.0",
-    "passlib[bcrypt]>=1.7.4",
     "pydantic-settings>=2.15.0",
     "pypdf>=6.16.1",
-    "python-jose[cryptography]>=3.5.0",
+    "python-docx>=1.2.0",
     "python-multipart>=0.0.32",
-    "slowapi>=0.1.10",
-    "sqlalchemy>=2.0.52",
+    "reportlab>=4.5.0",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.52.3",
 ]
@@ -40,8 +33,6 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.3",
-    "types-passlib>=1.7.7.20260211",
-    "types-python-jose>=3.5.0.20260408",
 ]
 
 [tool.uv]
@@ -64,3 +55,4 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["src", "tests"]
+markers = ["smoke: live-network tests (skipped by default)"]

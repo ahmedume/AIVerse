@@ -79,8 +79,34 @@ def get_embeddings() -> Embeddings:
         return OpenAIEmbeddings(
             model=settings.EMBEDDING_MODEL, openai_api_key=api_key, openai_api_base=base_url
         )
+    if provider == "gemini":
+        if not settings.provider_configured("gemini"):
+            raise ProviderNotConfiguredError("gemini")
+        return GeminiEmbeddings(model=settings.EMBEDDING_MODEL)
     if provider == "ollama":
         return OllamaEmbeddings(
             base_url=settings.OLLAMA_BASE_URL, model=settings.EMBEDDING_MODEL
         )
     raise AppError(f"Unknown embedding provider '{provider}'", "UNKNOWN_PROVIDER")
+
+
+class GeminiEmbeddings(Embeddings):
+    """Embeddings via the Google genai SDK (no official langchain wrapper)."""
+
+    def __init__(self, model: str) -> None:
+        from google.genai import Client, types
+
+        self._model = model
+        self._client = Client(api_key=get_settings().GEMINI_API_KEY)
+        self._types = types
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        contents = [
+            self._types.Content(parts=[self._types.Part(text=text)]) for text in texts
+        ]
+        result = self._client.models.embed_content(model=self._model, contents=contents)
+        embeddings = result.embeddings or []
+        return [list(item.values or []) for item in embeddings]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]

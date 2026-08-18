@@ -1,8 +1,8 @@
 # src/app/core/exceptions.py
 # Purpose: typed application error hierarchy + FastAPI handlers mapping to
 #          the unified { success, error: { code, message } } envelope.
-# Exports: AppError, NotFoundError, ValidationError, AuthorizationError,
-#          ForbiddenError, ProviderNotConfiguredError, register_exception_handlers
+# Exports: AppError, NotFoundError, ValidationError, ProviderNotConfiguredError,
+#          register_exception_handlers
 
 import logging
 
@@ -32,21 +32,6 @@ class ValidationError(AppError):
         super().__init__(message, code)
 
 
-class AuthorizationError(AppError):
-    def __init__(self, message: str = "Unauthorized", code: str = "UNAUTHORIZED") -> None:
-        super().__init__(message, code)
-
-
-class ForbiddenError(AppError):
-    def __init__(self, message: str = "Forbidden") -> None:
-        super().__init__(message, "FORBIDDEN")
-
-
-class ConflictError(AppError):
-    def __init__(self, message: str = "Resource already exists", code: str = "CONFLICT") -> None:
-        super().__init__(message, code)
-
-
 class ProviderNotConfiguredError(AppError):
     def __init__(self, provider: str) -> None:
         super().__init__(
@@ -55,14 +40,34 @@ class ProviderNotConfiguredError(AppError):
         )
 
 
-_STATUS_MAP: dict[type[AppError], int] = {
-    NotFoundError: 404,
-    ValidationError: 422,
-    AuthorizationError: 401,
-    ForbiddenError: 403,
-    ConflictError: 409,
-    ProviderNotConfiguredError: 503,
-}
+class FileTooLargeError(ValidationError):
+    def __init__(self, limit_mb: int) -> None:
+        super().__init__(f"File exceeds the {limit_mb} MB upload limit", "FILE_TOO_LARGE")
+
+
+class UnsupportedFileTypeError(ValidationError):
+    def __init__(self, ext: str, allowed: str) -> None:
+        super().__init__(
+            f"Unsupported file type '.{ext}'. Allowed: {allowed}.", "UNSUPPORTED_FILE_TYPE"
+        )
+
+
+class ParseFailedError(ValidationError):
+    def __init__(self, message: str = "Could not parse the file") -> None:
+        super().__init__(message, "PARSE_FAILED")
+
+
+class EmptyDocumentError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("The document contains no readable text", "EMPTY_DOCUMENT")
+
+
+_STATUS_MAP: list[tuple[type[AppError], int]] = [
+    (FileTooLargeError, 413),
+    (NotFoundError, 404),
+    (ValidationError, 422),
+    (ProviderNotConfiguredError, 503),
+]
 
 
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
@@ -75,7 +80,7 @@ def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-        status = _STATUS_MAP.get(type(exc), 400)
+        status = next((s for t, s in _STATUS_MAP if isinstance(exc, t)), 400)
         return _error_response(status, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)

@@ -1,137 +1,134 @@
-# Build Plan: Nexus
+# Build Plan: AIverse
 
 ## Strategy
 
-Divide and conquer. Each phase is self-contained with a verifiable deliverable. Complete a phase fully before starting the next. The ordering follows the dependency chain: config → auth → engine → RAG/agents → UI → hardening.
+Divide and conquer. Each phase is self-contained with a clear deliverable. Complete each phase fully before moving to the next. Never jump ahead. Compact code everywhere — a function over a 100-line component; nothing over 300 lines.
 
 ---
 
-## Phase 1: Scaffolding & Configuration
-**Goal:** Runnable skeleton with both apps, docker-compose, and env plumbing.
+## Phase 1: Spec + Scaffold
+**Goal:** Spec set finalized; backend/frontend scaffolded; Nexus remnants scrubbed.
 **Depends on:** Nothing
 
 **Tasks:**
-1. `uv init backend` — pyproject.toml with `[dependency-groups] dev` (pytest, ruff, mypy); `uv add` all backend deps from TECH_STACK.md (incl. `langgraph>=1.2`, `openai>=1.0`)
-2. Create `src/app/` layout (core, models, schemas, routers, services, repositories, agents, dependencies)
-3. Implement `core/config.py` (pydantic-settings: all env vars incl. `ZEN_API_KEY`, `ZEN_BASE_URL`; provider presence checks), `core/database.py` (async engine, WAL pragma, `SessionDep`), `core/exceptions.py` (AppError hierarchy + global handlers)
-4. `pnpm create next-app frontend` (TS, Tailwind v4, App Router, `--turbopack`); add deps; init shadcn/ui; Biome config + `strict` TS
-5. `GET /health` returning `{ success, data: { status: "ok", version } }`
-6. Root `docker-compose.yml` (api, web, ollama under `profiles: [local-models]`), `backend/.env.example` (ZEN_API_KEY placeholder etc.), `frontend/.env.example`, root `README.md`
-7. Frontend shell: root layout, `loading.tsx`, `error.tsx`, `not-found.tsx`, providers.tsx; `lib/api.ts` fetch client typed around `{ success, data, error }`
+1. Replace `sdd/` with AIverse spec set (PRD, SRS, SDS, SPEC, TECH_STACK, BUILD_PLAN, SKILL, PROMPTS)
+2. Scrub Nexus code: remove auth/DB/conversations/admin/templates/settings from backend; remove Nexus pages/components from frontend
+3. Scaffold AIverse folders per SDS §2 with header comments on every file
+4. Backend: `pyproject.toml` (uv), `core/config.py` (pydantic-settings), `core/exceptions.py`, `GET /health`; frontend: keep Next.js scaffold, strict tsconfig, Biome
+5. Stop old servers; `.env` + `.env.example` rewritten for AIverse
 
-**Deliverable:** `docker compose up` serves a health-check-able API at :8000 and a styled shell at :3000.
+**Deliverable:** Repo builds; `/health` returns ok; empty-but-correct folder structure.
 
-**Out of scope:** Any DB models, auth, business logic.
+**Out of scope:** Any feature logic.
 
 ---
 
-## Phase 2: Database & Authentication Backend
-**Goal:** Users can register, log in, refresh, and fetch their profile.
+## Phase 2: File Intake & Parsing
+**Goal:** Files in → structured blocks out; list/delete working.
 **Depends on:** Phase 1
 
 **Tasks:**
-1. SQLAlchemy async models: User, UserSetting; Alembic init + first migration against SQLite
-2. `core/security.py`: bcrypt (cost 12), JWT access (60 min) + rotating refresh (7 days), httpOnly cookie helpers
-3. Route `POST /auth/register`: validate email (RFC 5322) + password ≥ 8; 409 `EMAIL_TAKEN`; first user gets `role=admin`; issue token pair in httpOnly cookies
-4. Route `POST /auth/login`: 401 `INVALID_CREDENTIALS` (same message for unknown email and wrong password); deactivated → 401 `ACCOUNT_DISABLED`
-5. Route `POST /auth/refresh` (rotation: old refresh consumed, new pair issued), `POST /auth/logout` (clears cookies), `GET /auth/me` (user + settings)
-6. `dependencies.py`: `get_current_user` (cookie → access → verify → fetch user + `is_active` check)
-7. slowapi limits: `/auth/*` 5/min/IP
-8. pytest: register/login/refresh/me happy + error paths
+1. `services/parse_service.py`: txt/md/json/pdf/docx → blocks (headings, paragraphs, list_items, blockquotes) per SDS §6
+2. `routers/files_router.py`: `POST /api/files` (multipart + raw text), `GET /api/files`, `DELETE /api/files/{id}`; magic-byte validation; atomic manifest write
+3. Tests: happy path docx/md/txt/pdf; wrong type; > 20 MB; disguised extension; empty document; delete removes everything
 
-**Deliverable:** Full auth flow verified by passing pytest suite; curl login sets cookies and `/auth/me` returns the user.
+**Deliverable:** curl-verified upload/parse/list/delete with blocks.json on disk.
 
-**Out of scope:** Conversations, chat, password reset.
+**Out of scope:** Detection, plagiarism, humanize, chat.
 
 ---
 
-## Phase 3: Conversation Backend & Streaming Chat Engine
-**Goal:** Persisted conversations with real-time SSE chat in `chat` mode, working out of the box against the Zen API (free tier).
+## Phase 3: Detection
+**Goal:** Per-paragraph AI% + doc score streaming over SSE.
 **Depends on:** Phase 2
 
 **Tasks:**
-1. Models: Conversation, Message; first user message auto-titles conversation (50 chars)
-2. CRUD: `GET /conversations`, `POST /conversations`, `GET /conversations/{id}` (with messages), `PATCH /conversations/{id}` (title), `DELETE /conversations/{id}` — all ownership-scoped
-3. `core/llm.py` factory: `get_chat_model(provider, model, temperature)` for `zen` (ChatOpenAI with `base_url=ZEN_BASE_URL`, `api_key=ZEN_API_KEY`), openai, anthropic, gemini, ollama; raises `PROVIDER_NOT_CONFIGURED` when a required key is empty; `get_embeddings()` for cloud + ollama
-4. `POST /chat` (SSE, agent_type=`chat`): accept `{ conversation_id, provider?, model?, message }`; create/reuse conversation; persist user message; stream tokens via `astream_events(version="v3")` → `stream.messages` projection; on `done`, persist assistant message with `token_count`; abort-safe on client disconnect
-5. Event protocol per SDS §7 — `meta`, `token`, `done`, `error`
-6. `GET /conversations/{id}/messages` + `POST /chat` `regenerate: true` (delete last assistant message, replay last user message)
-7. slowapi: chat 20/min/user; structlog request logging
-8. pytest: conversation CRUD, ownership (403), SSE streaming (AsyncClient stream), regenerate; manual smoke test with `ZEN_API_KEY` filled
+1. `core/blocks.py` split utilities + `services/detect_service.py`: heuristic scorer (burstiness, TTR, bigram repetition, transition density, punctuation variety) + LLM scorer (concurrent, semaphore 3) + 0.6/0.4 blend
+2. `routers/detect_router.py`: SSE `block_score` → `done` with blocks (flagged ≥ 70)
+3. Provider error semantics: `PROVIDER_NOT_CONFIGURED` / `PROVIDER_ERROR` events; per-paragraph heuristic fallback
+4. Tests: AI-style sample scores ≥ 70; human-style ≤ 40; provider-missing → error event; heuristic-only fallback; stream shape
 
-**Deliverable:** `curl -N POST /chat` streams tokens with provider `zen` / model `deepseek-v4-flash-free`; conversations + messages persist across restarts.
+**Deliverable:** curl-verified SSE detection stream with sensible scores.
 
-**Out of scope:** RAG, agents, templates.
+**Out of scope:** Plagiarism, humanize, chat.
 
 ---
 
-## Phase 4: Documents, RAG & Templates
-**Goal:** Upload pipeline, per-user FAISS index, `rag` mode with sources, and template `textgen` mode.
-**Depends on:** Phase 3
+## Phase 4: Plagiarism Check
+**Goal:** Per-fragment web-match report + doc score over SSE.
+**Depends on:** Phase 3 (block splitting reuse)
 
 **Tasks:**
-1. Models: Document, Template
-2. `POST /documents` (multipart `file`): validate type (txt/md/json/pdf) + 20MB; status `processing`; background pipeline: extract text (pypdf for pdf) → `RecursiveCharacterTextSplitter` (800/100) → embed → save per-user FAISS at `data/vectorstore/{user_id}/`; on failure set status `failed` + `error`; on success `ready` + `chunk_count`
-3. `GET /documents`, `DELETE /documents/{id}` (also deletes vectors + file); uploads cap 10 files/hour/user
-4. `rag` mode: `retrieve_node` queries FAISS (top_k=4) for the user's ready docs → context block in prompt → stream + emit `sources` event (document_id, filename, score, excerpt)
-5. `textgen` mode: `template_id` required; validate template ownership; render `content.replace("{input}", message)` as system prompt
-6. Template CRUD: `GET/POST/PUT/DELETE /templates` — name unique per user; `{input}` presence validated on save (422 otherwise)
-7. pytest: upload happy path → status ready; type/size rejections; rag retrieval returns only owned documents; template validation
+1. `services/plagiarism_service.py`: fragment splitter (~120 words, sentence-aligned, max 40) + DDG HTML search (fixed host, timeout, caps, 1.5 s spacing) + token n-gram overlap scoring
+2. `routers/plagiarism_router.py`: SSE `fragment` → `done`
+3. Graceful degradation: DDG down → `PLAGIARISM_UNAVAILABLE` note; per-fragment `checked` flags
+4. Tests: fixture-HTML matching (unit, no network); live DDG smoke (skipped by default); empty text; caps
 
-**Deliverable:** A uploaded PDF answers questions with source chips; templates drive `textgen`.
+**Deliverable:** curl-verified SSE stream with matched URLs on a distinctive sentence.
 
-**Out of scope:** Agent mode, file versioning, multi-user shared corpus.
+**Out of scope:** Humanize, chat.
 
 ---
 
-## Phase 5: LangGraph Agents
-**Goal:** `agent` mode with a capped tool-calling loop, grounded in LangGraph docs patterns.
-**Depends on:** Phase 4
+## Phase 5: Humanizer + Export
+**Goal:** 1–7 rewrite streaming per block; DOCX/PDF download.
+**Depends on:** Phase 2
 
 **Tasks:**
-1. `agents/types.py`: `AgentState` = `MessagesState` subclass + `iterations: int`, `final: bool`, `source_chunks: list`; model/provider passed via `context_schema` (runtime config), NOT in state
-2. `agents/tools.py`: `search_documents(query)` (FAISS, returns top-3 excerpts) and `current_datetime()` (UTC); wrapped in `tool` decorator
-3. `agents/nodes.py`: `chat_node` (plain LLM), `retrieve_node` (rag context assembly), `agent_node` (model with `bind_tools`; returns update, never mutates state)
-4. `agents/graph.py`: `StateGraph(AgentState)` — START → route (conditional on agent_type): chat → chat_node → END; rag → retrieve_node → chat_node → END; textgen → chat_node → END; agent → agent_node → conditional: tools_and_iter<5 → tools_executor → agent_node, else → END. Safety: `recursion_limit=30` at invoke; `RetryPolicy(max_attempts=2)` on LLM nodes, `TimeoutPolicy(run_timeout=30)` — both via `set_node_defaults`/`add_node` kwargs (langgraph >= 1.2)
-5. Tool events: consume `stream.tools` channel (`tool-started`/`tool-finished`) → emit `tool_start`/`tool_end` SSE events; tool exceptions → observation text returned to the model via `tools_executor`
-6. Guard: graph hits recursion limit → emit `error` event `AGENT_LOOP_LIMIT`
-7. pytest: agent returns final answer with ≥1 tool call; loop cap honored (mock slow model); tool failure does not crash stream
+1. `services/humanize_service.py`: per-level system prompts (1–2 aggressive human, 3–5 balanced, 6–7 corporate), per-block rewrite, headings/lists untouched, SSE `block_start`/`token`/`block_end`/`done`
+2. `services/export_service.py`: blocks → docx (python-docx: heading styles, bullets, quotes, bold/italic) and pdf (reportlab: headings, wrapped paragraphs)
+3. `routers/humanize_router.py` + `routers/export_router.py`
+4. Tests: level validation; block/heading count preserved; meaning preserved (numbers intact); docx/pdf bytes openable (python-docx/reportlab re-open); empty blocks → 422
 
-**Deliverable:** `agent` mode completes tool calls and streams a final answer; iteration + recursion caps enforced.
+**Deliverable:** curl-verified streaming rewrite + valid DOCX/PDF downloads.
 
-**Out of scope:** Custom user-defined tools, web search, checkpointer persistence.
+**Out of scope:** Chat.
 
 ---
 
-## Phase 6: Frontend — Auth, Workspace, Documents, Templates, Settings
-**Goal:** All user-facing screens wired to the API, including streaming UI.
-**Depends on:** Phases 2–5 (API surface)
+## Phase 6: RAG Chatbot
+**Goal:** Grounded Q&A over uploads with AI-locator tool.
+**Depends on:** Phases 2–3
 
 **Tasks:**
-1. `stores/useAuthStore.ts` (Zustand) + `lib/auth.ts` (cookie-safe fetch, 401 → refresh → retry once → redirect `/login`); route groups `(marketing)`, `(auth)`, `(app)` with `middleware.ts` guard (no token → `/login`)
-2. Landing page; Login/Register forms (RHF + Zod, inline errors)
-3. Workspace: sidebar (conversation list, client search, new chat), header (mode + model + provider — default `zen`/`deepseek-v4-flash-free`), MessageList with streaming cursor, Composer (Enter to send, disable when empty or streaming, Regenerate), source chips from `sources` events, tool call chips from `tool_start`/`tool_end`
-4. `hooks/useChatStream.ts`: fetch `POST /chat` with `ReadableStream`, parse SSE (`lib/sse.ts`), push tokens into TanStack Query cache; handle `NO_DOCUMENTS` (banner suggesting /documents), `PROVIDER_NOT_CONFIGURED` (banner → settings), `AGENT_LOOP_LIMIT`, `429`
-5. Documents page (dropzone + table + status badges), Templates page (CRUD + `{input}` hint), Settings page (defaults, provider status — Zen API shows "configured" when key presence reported by `/auth/me` meta)
-6. Loading/error/empty states on every screen; Mobility: drawer sidebar on mobile
+1. `core/vector_store.py`: FAISS index + meta.jsonl (excerpt + full text), rebuild-on-delete
+2. `agents/`: `types.py` (AgentState, ContextSchema), `tools.py` (search_documents, analyze_ai_content, current_datetime), `nodes.py`, `graph.py` (RetryPolicy max 2, TimeoutPolicy 60, recursion_limit 30, `astream_events` v3)
+3. `services/rag_service.py`: chunk 800/100 → embed → index; retrieve top_k=4
+4. `routers/chat_router.py`: SSE `meta`/`token`/`sources`/`tool_start`/`tool_end`/`done`/`error`
+5. Tests: NO_DOCUMENTS; retrieval returns owned chunks (single-user → all); analyze tool output shape; loop cap
 
-**Deliverable:** Full UX flow — register → chat (4 modes, zen default) → upload → RAG answer with sources → template → settings.
+**Deliverable:** curl-verified streaming chat with citations and AI-score tool output.
 
-**Out of scope:** Admin UI, dark-mode toggle polish (default follows system), i18n.
+**Out of scope:** Auth, persistence of chats.
 
 ---
 
-## Phase 7: Admin, Hardening & Integration Validation
-**Goal:** Admin panel + production readiness + full SRS validation.
+## Phase 7: Frontend — three tools
+**Goal:** Landing + Chatbot + Checker + Remover pages, fully wired.
+**Depends on:** Phases 2–6 (API surface)
+
+**Tasks:**
+1. `lib/api.ts`, `lib/sse.ts`, `hooks/useSseStream.ts`, `hooks/useFiles.ts`
+2. Remover (`/remover`, primary): FilePicker, LevelSlider 1–7, streaming RewritePane, CopyButton, Download DOCX/PDF
+3. Checker (`/checker`): UploadPane, doc-level AI% + plagiarism% bars, ParagraphCards with scores/reasons, PlagiarismCards with URLs
+4. Chatbot (`/chat`): FilePicker, ChatPane, streaming cursor, SourceChips (filename + score + ai_score)
+5. Landing `/` linking the three; loading/empty/error states everywhere; accessibility (aria-live on streams)
+
+**Deliverable:** All three tools work end-to-end in the browser against the live API.
+
+**Out of scope:** Dark-mode polish, i18n.
+
+---
+
+## Phase 8: Hardening, Docker & Validation
+**Goal:** Production-grade pass + full validation.
 **Depends on:** All phases
 
 **Tasks:**
-1. Admin backend: `GET /admin/users` (paginated, search by email), `PATCH /admin/users/{id}` (`{ role?, is_active? }`, admin-only dependency `require_admin`, cannot deactivate/demote self → 400 `SELF_ACTION_FORBIDDEN`)
-2. Admin frontend page with role select + active toggle, optimistic updates, 403 handling
-3. Hardening: CORS restricted to `CORS_ORIGINS`; error boundaries everywhere; `docker compose build` works cleanly (multi-stage, `uv sync --frozen`); `.dockerignore` excludes `data/`; `recursion_limit` + rate-limit constants centralized in config
-4. Integration test script: fresh user → 4-mode conversations → upload → admin actions, validated against SRS §6 table
-5. Final pass: ruff + mypy clean, `pnpm typecheck` + Biome clean, no TODO stubs. Confirm Zen API free model streams in all four modes
+1. Docker: `backend/Dockerfile` (multi-stage, `uv sync --frozen`), `frontend/Dockerfile` (`next build`), root `docker-compose.yml` (api + web + ollama profile), `.dockerignore` excluding `data/`
+2. Security tests: path traversal, disguised binaries, CORS, download headers, size caps, no secrets in responses
+3. Integration script: upload → detect → plagiarism → humanize → export → chat, asserted end-to-end
+4. Final gates: ruff + mypy clean, pytest green, `tsc --noEmit` + Biome clean, no TODO stubs
+5. Screenshots of every page (working) into `imgs/`
 
-**Deliverable:** Production-shaped containerized Nexus passing every row of the SRS validation table.
-
-**Out of scope:** Deployment to real servers, SSL/nginx reverse-proxy config, CI.
+**Deliverable:** `docker compose up` runs the full stack; every SRS §6 criterion green; screenshots saved.

@@ -106,12 +106,14 @@ def search(
     results: list[dict[str, object]] = []
     for score, row_id in zip(scores[0], ids[0], strict=True):
         row = entry.meta[int(row_id)]
+        text = str(row["text"])
         results.append(
             {
                 "document_id": row["document_id"],
                 "filename": row["filename"],
                 "score": round(float(score), 4),
-                "excerpt": str(row["text"])[:_EXCERPT_LENGTH],
+                "excerpt": text[:_EXCERPT_LENGTH],
+                "text": text,
             }
         )
     return results
