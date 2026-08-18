@@ -3,13 +3,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-
-import { downloadExport, streamSSE, type Source } from "@/lib/api";
+import { SourcePicker } from "@/components/source-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SourcePicker } from "@/components/source-picker";
+import { downloadExport, type Source, streamSSE } from "@/lib/api";
 
-type Rewritten = { index: number; text: string };
 type BlockStream = { index: number; type: string; text: string };
 
 const LEVELS = [
@@ -43,11 +41,16 @@ export function RemoverClient() {
         { source, level },
         (ev) => {
           if (ev.event === "block_start") {
-            setBlocks((b) => [...b, { index: Number(ev.data.index), type: String(ev.data.type), text: "" }]);
+            setBlocks((b) => [
+              ...b,
+              { index: Number(ev.data.index), type: String(ev.data.type), text: "" },
+            ]);
           } else if (ev.event === "token") {
             const i = Number(ev.data.index);
             const token = String(ev.data.token);
-            setBlocks((b) => b.map((blk) => (blk.index === i ? { ...blk, text: blk.text + token } : blk)));
+            setBlocks((b) =>
+              b.map((blk) => (blk.index === i ? { ...blk, text: blk.text + token } : blk)),
+            );
           } else if (ev.event === "done") {
             setDone(true);
           }
@@ -93,7 +96,11 @@ export function RemoverClient() {
                 </span>
               </span>
               <span className="text-xs text-muted-foreground">
-                {level <= 2 ? "aggressive humanizing" : level <= 5 ? "balanced" : "corporate polish"}
+                {level <= 2
+                  ? "aggressive humanizing"
+                  : level <= 5
+                    ? "balanced"
+                    : "corporate polish"}
               </span>
             </div>
             <input
@@ -112,10 +119,20 @@ export function RemoverClient() {
             </Button>
             {done && (
               <>
-                <Button variant="secondary" size="sm" onClick={() => void exportDoc("docx")} disabled={exporting}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void exportDoc("docx")}
+                  disabled={exporting}
+                >
                   {exporting ? "Exporting…" : "Export DOCX"}
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => void exportDoc("pdf")} disabled={exporting}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void exportDoc("pdf")}
+                  disabled={exporting}
+                >
                   Export PDF
                 </Button>
               </>
@@ -133,9 +150,7 @@ export function RemoverClient() {
           <CardContent className="space-y-3">
             {blocks.map((b) => (
               <div key={b.index}>
-                {b.type === "heading" && (
-                  <h4 className="font-semibold">{b.text || "…"}</h4>
-                )}
+                {b.type === "heading" && <h4 className="font-semibold">{b.text || "…"}</h4>}
                 {b.type === "blockquote" && (
                   <blockquote className="border-l-2 pl-3 italic">{b.text || "…"}</blockquote>
                 )}

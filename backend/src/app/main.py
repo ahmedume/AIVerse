@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 

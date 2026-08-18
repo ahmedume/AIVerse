@@ -13,7 +13,6 @@ from app.core.config import get_settings
 from app.core.heuristics import heuristic_score
 from app.core.llm import get_model_chain
 from app.core.sse import sse
-from app.services import parse_service
 
 settings = get_settings()
 _LIMIT = asyncio.Semaphore(3)
@@ -81,7 +80,7 @@ async def detect_stream(blocks: list[Block]) -> AsyncIterator[str]:
     results = await asyncio.gather(
         *[_score_worker(b, heuristic_score(b.text)) for b in scorable]
     )
-    for block, result in zip(scorable, results):
+    for block, result in zip(scorable, results, strict=False):
         block.ai_score = result["ai_score"]
         block.reason = result["reason"]
         yield sse({"event": "block_score", "data": result})

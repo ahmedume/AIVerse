@@ -86,12 +86,14 @@ def _text_blocks(text: str) -> list[Block]:
             continue
         if _LIST_MD.match(line):
             flush()
-            blocks.append(Block(index=index, type="list_item", text=_LIST_MD.match(line).group(1).strip()))
+            item = _LIST_MD.match(line).group(1).strip()
+            blocks.append(Block(index=index, type="list_item", text=item))
             index += 1
             continue
         if _QUOTE_MD.match(line):
             flush()
-            blocks.append(Block(index=index, type="blockquote", text=_QUOTE_MD.match(line).group(1).strip()))
+            quote = _QUOTE_MD.match(line).group(1).strip()
+            blocks.append(Block(index=index, type="blockquote", text=quote))
             index += 1
             continue
         if len(line) <= 60 and _HEADING_FLAT.match(line):
@@ -107,8 +109,8 @@ def _text_blocks(text: str) -> list[Block]:
 def _parse_docx(raw: bytes) -> list[Block]:
     try:
         doc = Document(io.BytesIO(raw))
-    except Exception:
-        raise ParseFailedError("Could not open the DOCX file")
+    except Exception as err:
+        raise ParseFailedError("Could not open the DOCX file") from err
     blocks: list[Block] = []
     for para in doc.paragraphs:
         text = para.text.strip()
@@ -129,8 +131,8 @@ def _parse_pdf(raw: bytes) -> list[Block]:
     try:
         reader = pypdf.PdfReader(io.BytesIO(raw))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    except Exception:
-        raise ParseFailedError("Could not extract text from the PDF")
+    except Exception as err:
+        raise ParseFailedError("Could not extract text from the PDF") from err
     return _text_blocks(text)
 
 
@@ -142,12 +144,12 @@ def parse_document(raw: bytes, filename: str) -> tuple[str, list[Block]]:
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
-            raise ParseFailedError("File is not valid UTF-8 text")
+            raise ParseFailedError("File is not valid UTF-8 text") from None
         if ext == "json":
             try:
                 parsed = json.loads(text)
             except json.JSONDecodeError:
-                raise ParseFailedError("Invalid JSON content")
+                raise ParseFailedError("Invalid JSON content") from None
             if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
                 text = "\n\n".join(parsed)
         blocks = _text_blocks(text)

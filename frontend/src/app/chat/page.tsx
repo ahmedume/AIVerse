@@ -1,8 +1,8 @@
 // src/app/chat/page.tsx — RAG chatbot (AI-locator) page.
 // Exports: ChatPage
 
-import { Nav } from "@/components/nav";
 import { ChatClient } from "@/components/chat-client";
+import { Nav } from "@/components/nav";
 
 export default function ChatPage() {
   return (

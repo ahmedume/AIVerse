@@ -79,7 +79,8 @@ async def _rewrite_block(chain: list, block: Block, level: int) -> AsyncIterator
     the original text only when every provider fails."""
     for model in chain:
         try:
-            async for chunk in model.astream([HumanMessage(content=_prompt_for(block.text, level))]):
+            prompt = HumanMessage(content=_prompt_for(block.text, level))
+            async for chunk in model.astream([prompt]):
                 piece = _chunk_text(getattr(chunk, "content", "") or "")
                 if piece:
                     yield piece
@@ -94,7 +95,9 @@ async def humanize_stream(source: dict, level: int) -> AsyncIterator[str]:
     targets = [b for b in blocks if _rewritable(b)]
     yield sse({"event": "meta", "data": {"total": len(targets), "level": level}})
 
-    chain = get_model_chain(settings.DEFAULT_PROVIDER, settings.DEFAULT_MODEL, temperature=level_profile(level)[1])
+    chain = get_model_chain(
+        settings.DEFAULT_PROVIDER, settings.DEFAULT_MODEL, temperature=level_profile(level)[1]
+    )
 
     rewritten: list[dict] = []
     for block in blocks:
@@ -112,4 +115,9 @@ async def humanize_stream(source: dict, level: int) -> AsyncIterator[str]:
         yield sse({"event": "block_end", "data": {"index": block.index, "text": new_text}})
         rewritten.append({"index": block.index, "type": block.type, "text": new_text})
 
-    yield sse({"event": "done", "data": {"level": level, "rewritten": len(rewritten), "blocks": rewritten}})
+    yield sse(
+        {
+            "event": "done",
+            "data": {"level": level, "rewritten": len(rewritten), "blocks": rewritten},
+        }
+    )

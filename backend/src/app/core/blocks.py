@@ -30,9 +30,7 @@ def split_sentences(text: str) -> list[str]:
         part = part.strip()
         if not part:
             continue
-        if out and _ABBR.search(out[-1]):
-            out[-1] = f"{out[-1]} {part}"
-        elif out and _INITIAL.search(out[-1]) and len(out[-1]) <= 3:
+        if out and (_ABBR.search(out[-1]) or _INITIAL.search(out[-1]) and len(out[-1]) <= 3):
             out[-1] = f"{out[-1]} {part}"
         else:
             out.append(part)

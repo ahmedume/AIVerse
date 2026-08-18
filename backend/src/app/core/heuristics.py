@@ -35,7 +35,7 @@ def heuristic_score(text: str) -> float:
     ttr = len(set(words)) / len(words)
     ttr_score = max(0.0, min(100.0, (0.92 - ttr) * 160.0))
 
-    bigrams = Counter(zip(words, words[1:]))
+    bigrams = Counter(zip(words, words[1:], strict=False))
     top = max(bigrams.values(), default=0)
     rep = max(0.0, min(100.0, top / max(len(words) / 20.0, 1.0) * 25.0))
 

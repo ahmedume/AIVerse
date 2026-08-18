@@ -80,22 +80,20 @@ export async function streamSSE(
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    let idx: number;
-    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+    let idx = buffer.indexOf("\n\n");
+    while (idx !== -1) {
       const frame = buffer.slice(0, idx);
       buffer = buffer.slice(idx + 2);
       for (const line of frame.split("\n")) {
         if (!line.startsWith("data: ")) continue;
         onEvent(JSON.parse(line.slice(6)) as SSEEvent);
       }
+      idx = buffer.indexOf("\n\n");
     }
   }
 }
 
-export async function downloadExport(
-  source: Source,
-  format: "docx" | "pdf",
-): Promise<void> {
+export async function downloadExport(source: Source, format: "docx" | "pdf"): Promise<void> {
   const res = await fetch(`${API}/api/export`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

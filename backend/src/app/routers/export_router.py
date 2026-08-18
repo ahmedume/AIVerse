@@ -5,7 +5,6 @@
 from fastapi import APIRouter
 from fastapi.responses import Response
 
-from app.schemas.detect_schema import DetectSource
 from app.schemas.export_schema import ExportRequest
 from app.services import export_service, parse_service
 

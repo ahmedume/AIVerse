@@ -38,7 +38,9 @@ def build_fragments(blocks: list[Block]) -> list[str]:
     for sentence in sentences:
         current.append(sentence)
         words += len(sentence.split())
-        if words >= _FRAGMENT_WORDS or (current and words >= _FRAGMENT_WORDS // 2 and len(fragments) >= _MAX_FRAGMENTS - 1):
+        if words >= _FRAGMENT_WORDS or (
+            current and words >= _FRAGMENT_WORDS // 2 and len(fragments) >= _MAX_FRAGMENTS - 1
+        ):
             fragments.append(" ".join(current))
             current, words = [], 0
         if len(fragments) >= _MAX_FRAGMENTS:
@@ -150,7 +152,8 @@ async def plagiarism_stream(source: dict, max_results: int = 5) -> AsyncIterator
         yield sse({"event": "done", "data": {"checked": 0, "matched": 0, "matches": []}})
         return
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"}) as client:
+    headers = {"User-Agent": "Mozilla/5.0"}
+    async with httpx.AsyncClient(timeout=_TIMEOUT_S, headers=headers) as client:
         checked = 0
         matched_fragments = 0
         all_matches: list[dict] = []

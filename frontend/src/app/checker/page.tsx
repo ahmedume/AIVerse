@@ -1,8 +1,8 @@
 // src/app/checker/page.tsx — AI + plagiarism checker page.
 // Exports: CheckerPage
 
-import { Nav } from "@/components/nav";
 import { CheckerClient } from "@/components/checker-client";
+import { Nav } from "@/components/nav";
 
 export default function CheckerPage() {
   return (

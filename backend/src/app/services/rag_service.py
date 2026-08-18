@@ -32,6 +32,7 @@ _CHUNK_SIZE = 800
 _CHUNK_OVERLAP = 100
 _TOP_K = 4
 _TOOL_LIMIT = 5
+_RUN_NAME = "aiverse_chat"
 
 INDEX_CACHE: dict[str, "VectorStore"] = {}
 _INDEX_LOCK = asyncio.Lock()
@@ -259,7 +260,7 @@ async def chat_stream(source: dict, question: str) -> AsyncIterator[str]:
     try:
         stream = graph.astream_events(
             {"messages": [HumanMessage(content=question)]},
-            config={"run_name": "aiverse_chat", "recursion_limit": 30},
+            config={"run_name": _RUN_NAME, "recursion_limit": 30},
             version="v2",
         )
         async for event in stream:
@@ -286,6 +287,13 @@ async def chat_stream(source: dict, question: str) -> AsyncIterator[str]:
                         "data": {"name": event["name"], "output": str(output)[:500]},
                     }
                 )
+            elif kind == "on_chain_end" and event.get("name") in ("LangGraph", _RUN_NAME):
+                messages = (event["data"].get("output") or {}).get("messages") or []
+                if messages:
+                    last = messages[-1]
+                    final_text = _chunk_text(getattr(last, "content", "") or "")
+                    if final_text:
+                        answer = answer or final_text
     except Exception:
         if not answer:
             answer = "I couldn't finish an answer. Please try again or check the API keys."

@@ -2,13 +2,12 @@
 // Exports: SourcePicker
 
 "use client";
+import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-
-import { deleteFile, listFiles, uploadFile, type FileOut, type Source } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { deleteFile, type FileOut, listFiles, type Source, uploadFile } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const MODES = ["text", "upload", "library"] as const;
 type Mode = (typeof MODES)[number];
@@ -22,22 +21,11 @@ type Props = {
 export function SourcePicker({ source, onChange, disabled }: Props) {
   const [mode, setMode] = useState<Mode>(source.text ? "text" : "upload");
   const [text, setText] = useState(source.text ?? "");
-  const [files, setFiles] = useState<FileOut[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      setFiles(await listFiles());
-    } catch {
-      setError("Could not load the file library");
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const filesQuery = useQuery({ queryKey: ["files"], queryFn: listFiles });
+  const files: FileOut[] = filesQuery.data ?? [];
 
   const pickText = (value: string) => {
     setText(value);
@@ -51,7 +39,7 @@ export function SourcePicker({ source, onChange, disabled }: Props) {
     try {
       const out = await uploadFile(file);
       onChange({ file_id: out.id });
-      await refresh();
+      await filesQuery.refetch();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -62,7 +50,7 @@ export function SourcePicker({ source, onChange, disabled }: Props) {
   const removeFile = async (id: string) => {
     await deleteFile(id);
     if (source.file_id === id) onChange({});
-    await refresh();
+    await filesQuery.refetch();
   };
 
   return (

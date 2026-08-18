@@ -3,17 +3,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-
-import {
-  streamSSE,
-  type BlockScore,
-  type FragmentResult,
-  type Source,
-} from "@/lib/api";
+import { SourcePicker } from "@/components/source-picker";
 import { Badge, verdictBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SourcePicker } from "@/components/source-picker";
+import { type BlockScore, type FragmentResult, type Source, streamSSE } from "@/lib/api";
 
 type Stage = "idle" | "detecting" | "scanning";
 
@@ -104,7 +98,11 @@ export function CheckerClient() {
             <Button onClick={() => void runDetect()} disabled={!ready || busy}>
               {stage === "detecting" ? "Detecting…" : "Run AI detection"}
             </Button>
-            <Button variant="secondary" onClick={() => void runPlagiarism()} disabled={!ready || busy}>
+            <Button
+              variant="secondary"
+              onClick={() => void runPlagiarism()}
+              disabled={!ready || busy}
+            >
               {stage === "scanning" ? "Scanning web…" : "Check plagiarism"}
             </Button>
             {busy && (
@@ -143,10 +141,7 @@ export function CheckerClient() {
                     </span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cnBar(s.ai_score)}
-                      style={{ width: `${s.ai_score}%` }}
-                    />
+                    <div className={cnBar(s.ai_score)} style={{ width: `${s.ai_score}%` }} />
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{s.reason}</p>
                 </div>
