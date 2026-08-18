@@ -59,13 +59,28 @@ def _rewritable(block: Block) -> bool:
     return block.type in ("paragraph", "list_item")
 
 
+def _chunk_text(content) -> str:
+    """Extract plain text from model chunks (strings or Gemini-style part lists)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+            elif isinstance(item, str):
+                parts.append(item)
+        return "".join(parts)
+    return str(content)
+
+
 async def _rewrite_block(chain: list, block: Block, level: int) -> AsyncIterator[str]:
     """Stream rewritten tokens from the first model that works; fall back to
     the original text only when every provider fails."""
     for model in chain:
         try:
             async for chunk in model.astream([HumanMessage(content=_prompt_for(block.text, level))]):
-                piece = str(getattr(chunk, "content", "") or "")
+                piece = _chunk_text(getattr(chunk, "content", "") or "")
                 if piece:
                     yield piece
             return

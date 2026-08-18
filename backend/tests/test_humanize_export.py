@@ -76,6 +76,12 @@ async def test_humanize_stream_keeps_heading_verbatim(monkeypatch):
     assert blocks[0]["type"] == "paragraph"
 
 
+def test_chunk_text_extracts_gemini_parts():
+    assert humanize_service._chunk_text("plain") == "plain"
+    assert humanize_service._chunk_text([{"type": "text", "text": "Hello "}, {"type": "text", "text": "world"}]) == "Hello world"
+    assert humanize_service._chunk_text([{"type": "text", "text": "Only"}]) == "Only"
+
+
 async def test_humanize_stream_falls_back_to_second_provider(monkeypatch):
     class BrokenModel:
         async def astream(self, messages):

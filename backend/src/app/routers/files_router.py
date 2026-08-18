@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.exceptions import FileTooLargeError, ValidationError
 from app.schemas.common import Envelope
 from app.schemas.file_schema import FileOut
-from app.services import parse_service
+from app.services import parse_service, rag_service
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -55,4 +55,5 @@ async def list_files() -> Envelope[list[FileOut]]:
 @router.delete("/{file_id}", status_code=204)
 async def delete_file(file_id: str) -> Response:
     parse_service.delete_document(file_id)
+    rag_service.INDEX_CACHE.pop(file_id, None)
     return Response(status_code=204)
