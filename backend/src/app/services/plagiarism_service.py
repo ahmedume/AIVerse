@@ -59,10 +59,11 @@ class _ResultParser(HTMLParser):
         self._current: dict | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        classes = dict(attrs).get("class", "") or ""
+        attr_map = dict(attrs)
+        classes = attr_map.get("class", "") or ""
         if tag == "a" and "result__a" in classes:
             self._in_link = True
-            self._current = {"href": "", "title": "", "snippet": ""}
+            self._current = {"href": attr_map.get("href", ""), "title": "", "snippet": ""}
             self.results.append(self._current)
         elif tag == "a" and "result__snippet" in classes:
             self._in_snippet = True
