@@ -1,7 +1,6 @@
 # tests/test_heuristics.py
 # Purpose: statistical detector unit tests — direction, floors, robustness.
 
-import re
 
 from app.core.heuristics import heuristic_score
 

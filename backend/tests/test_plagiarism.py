@@ -3,10 +3,8 @@
 
 import json
 
-import pytest
-
 from app.core.blocks import Block
-from app.services import plagiarism_service, parse_service
+from app.services import parse_service, plagiarism_service
 
 _DDG_PAGE = """
 <html><body>

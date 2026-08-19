@@ -3,8 +3,8 @@
 
 import json
 
-from app.core.heuristics import heuristic_score
 from app.core.exceptions import EmptyDocumentError
+from app.core.heuristics import heuristic_score
 from app.services import detect_service, parse_service
 
 

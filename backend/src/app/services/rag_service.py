@@ -7,6 +7,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,8 @@ from app.services import parse_service
 from app.services.humanize_service import _chunk_text
 
 settings = get_settings()
+
+logger = logging.getLogger("app")
 
 _CHUNK_SIZE = 800
 _CHUNK_OVERLAP = 100
@@ -173,6 +176,7 @@ def build_graph(model, context: _Context) -> object:
                     )
                 ]
             }
+        last_error: str | None = None
         for model_candidate in context.models:
             try:
                 collected: list[str] = []
@@ -184,14 +188,16 @@ def build_graph(model, context: _Context) -> object:
                     if getattr(chunk, "tool_calls", None):
                         tool_calls.extend(chunk.tool_calls)
                 return {"messages": [AIMessage(content="".join(collected), tool_calls=tool_calls)]}
-            except Exception:
+            except Exception as exc:
+                last_error = str(exc)
+                logger.warning("chat provider failed: %s", last_error)
                 continue
         return {
             "messages": [
                 AIMessage(
                     content=(
-                        "I couldn't reach any language model provider. "
-                        "Please check the API keys."
+                        "We can't process your message right now because "
+                        "you don't have enough credits."
                     )
                 )
             ]

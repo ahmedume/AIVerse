@@ -1,14 +1,13 @@
 # tests/test_rag.py
 # Purpose: RAG service tests — chunking, vector store roundtrip, tools, agent routing.
 
-import json
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from app.core.blocks import Block
-from app.services import rag_service, parse_service
+from app.services import parse_service, rag_service
 
 
 class FakeEmbeddings:

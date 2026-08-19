@@ -14,7 +14,7 @@ from app.core.exceptions import AppError, ProviderNotConfiguredError
 
 settings = get_settings()
 
-SUPPORTED_PROVIDERS = ("zen", "openai", "anthropic", "gemini", "ollama")
+SUPPORTED_PROVIDERS = ("zen", "openai", "anthropic", "gemini", "ollama", "groq", "openrouter")
 
 
 def get_chat_model(provider: str, model: str, temperature: float = 0.7) -> BaseChatModel:
@@ -45,6 +45,25 @@ def get_chat_model(provider: str, model: str, temperature: float = 0.7) -> BaseC
         return ChatGoogleGenerativeAI(
             model=model, api_key=settings.GEMINI_API_KEY, temperature=temperature
         )
+    if provider == "groq":
+        if not settings.provider_configured("groq"):
+            raise ProviderNotConfiguredError("groq")
+        return ChatOpenAI(
+            model=model,
+            api_key=settings.GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
+            temperature=temperature,
+        )
+    if provider == "openrouter":
+        if not settings.provider_configured("openrouter"):
+            raise ProviderNotConfiguredError("openrouter")
+        return ChatOpenAI(
+            model=model,
+            api_key=settings.OPENROUTER_API_KEY,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={"HTTP-Referer": "http://localhost:3001", "X-Title": "AIverse"},
+            temperature=temperature,
+        )
     if provider == "ollama":
         return ChatOllama(base_url=settings.OLLAMA_BASE_URL, model=model, temperature=temperature)
     raise AppError(f"Unknown provider '{provider}'", "UNKNOWN_PROVIDER")
@@ -53,19 +72,25 @@ def get_chat_model(provider: str, model: str, temperature: float = 0.7) -> BaseC
 def get_model_chain(
     provider: str, model: str, temperature: float = 0.7
 ) -> list[BaseChatModel]:
-    """Ordered candidate models: requested provider first, then the configured
-    fallback provider. Unconfigured providers are skipped; empty means none usable."""
+    """Ordered candidate models in auto-switch order: requested provider first,
+    then the configured fallback, then Groq, then OpenRouter. Providers without
+    keys are skipped; empty means none usable. Every consumer iterates the chain
+    and tries each model until one responds."""
     if provider not in SUPPORTED_PROVIDERS:
         raise AppError(f"Unknown provider '{provider}'", "UNKNOWN_PROVIDER")
+    candidates: list[tuple[str, str]] = [(provider, model)]
+    if settings.FALLBACK_PROVIDER and settings.FALLBACK_MODEL:
+        candidates.append((settings.FALLBACK_PROVIDER, settings.FALLBACK_MODEL))
+    candidates.append(("groq", settings.GROQ_MODEL))
+    candidates.append(("openrouter", settings.OPENROUTER_MODEL))
+    seen: set[tuple[str, str]] = set()
     chain: list[BaseChatModel] = []
-    fallback = settings.FALLBACK_PROVIDER
-    if fallback and fallback != provider and settings.FALLBACK_MODEL:
-        candidates = [(provider, model), (fallback, settings.FALLBACK_MODEL)]
-    else:
-        candidates = [(provider, model)]
     for candidate_provider, candidate_model in candidates:
-        if settings.provider_configured(candidate_provider):
-            chain.append(get_chat_model(candidate_provider, candidate_model, temperature))
+        key = (candidate_provider, candidate_model)
+        if key in seen or not settings.provider_configured(candidate_provider):
+            continue
+        seen.add(key)
+        chain.append(get_chat_model(candidate_provider, candidate_model, temperature))
     return chain
 
 

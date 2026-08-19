@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
     # Defaults
@@ -34,6 +36,8 @@ class Settings(BaseSettings):
     TEMPERATURE: float = 0.7
     FALLBACK_PROVIDER: str = ""
     FALLBACK_MODEL: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
 
     # Embeddings
     EMBEDDING_PROVIDER: str = "gemini"
@@ -73,6 +77,10 @@ class Settings(BaseSettings):
             return bool(self.ANTHROPIC_API_KEY)
         if provider == "gemini":
             return bool(self.GEMINI_API_KEY)
+        if provider == "groq":
+            return bool(self.GROQ_API_KEY)
+        if provider == "openrouter":
+            return bool(self.OPENROUTER_API_KEY)
         return provider == "ollama"
 
 
