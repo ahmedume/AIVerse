@@ -114,7 +114,7 @@ AI-written text is everywhere, and existing tools are scattered: detectors are p
 ## 8. Constraints
 - FastAPI + Next.js (existing repo stack); `uv`/`pnpm` only
 - LangGraph for agent modes; SSE for all streaming
-- Zen API default (`deepseek-v4-flash-free`); embeddings via Gemini default
+- Groq API default (`qwen/qwen3.6-27b`) with OpenRouter fallback (`z-ai/glm-5.2:free`); embeddings via Gemini default
 - Plagiarism: DuckDuckGo HTML only, no API keys, best-effort
 - No database, no auth, no external storage; single user
 - Tests: unit + system + functional + security (pytest; frontend gates via tsc/biome)

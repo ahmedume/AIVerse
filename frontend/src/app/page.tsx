@@ -35,7 +35,7 @@ export default function LandingPage() {
       <Nav />
       <section className="mx-auto flex max-w-5xl flex-col items-center px-6 py-24 text-center">
         <p className="text-sm text-muted-foreground">
-          Self-hosted · Zen API default · your files stay on your machine
+          Self-hosted · Groq API default · your files stay on your machine
         </p>
         <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-[1.05] tracking-tight md:text-7xl">
           Detect AI text.

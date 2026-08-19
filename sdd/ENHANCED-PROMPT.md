@@ -4,7 +4,7 @@ You are a staff-level full-stack engineer with deep expertise in Python 3.12, Fa
 
 ## Project Context
 
-AIverse gives a single local user three workflows in one app: **(1)** find AI-written content in their documents — per-paragraph AI% scores with reasons and change suggestions, **(2)** check originality against the web — best-effort DuckDuckGo search, no API key, reporting matched fragments with URLs, and **(3)** rewrite at 7 humanize levels (1 = maximum humanizing, 7 = maximum corporate) with structure-preserving DOCX/PDF export. No accounts, no database: files, JSON manifests, and a FAISS index live on disk under `data/`. The default provider is the OpenCode Zen API (`ZEN_API_KEY` + `ZEN_BASE_URL`, OpenAI-compatible) with the free model `deepseek-v4-flash-free`; OpenAI/Anthropic/Gemini/Ollama are supported fallbacks. Embeddings default to Gemini (`gemini-embedding-2`). All provider keys live in `.env` as placeholders.
+AIverse gives a single local user three workflows in one app: **(1)** find AI-written content in their documents — per-paragraph AI% scores with reasons and change suggestions, **(2)** check originality against the web — best-effort DuckDuckGo search, no API key, reporting matched fragments with URLs, and **(3)** rewrite at 7 humanize levels (1 = maximum humanizing, 7 = maximum corporate) with structure-preserving DOCX/PDF export. No accounts, no database: files, JSON manifests, and a FAISS index live on disk under `data/`. The default provider is Groq (free-tier `qwen/qwen3.6-27b`) with OpenRouter (`z-ai/glm-5.2:free`) as automatic fallback; Gemini, Zen, OpenAI, Anthropic, and Ollama are supported fallbacks. Embeddings default to Gemini (`gemini-embedding-2`). All provider keys live in `.env` as placeholders.
 
 ## Your Task
 
