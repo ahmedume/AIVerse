@@ -1,5 +1,5 @@
-﻿# src/app/services/rag_service.py
-# Purpose: RAG chatbot — FAISS vector store over uploaded documents, LangGraph
+# src/app/services/rag_service.py
+# Purpose: RAG chatbot � FAISS vector store over uploaded documents, LangGraph
 #          agent (StateGraph + tools) streamed to SSE. Chunking 800/100, top_k=4,
 #          5-iteration tool guard, retry/timeout policies per SKILL.md.
 # Exports: build_chunks, VectorStore, chat_stream
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import faiss
 import numpy as np
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -159,6 +159,16 @@ class _Context:
         self.sources: list[dict] = []
 
 
+_SYSTEM_PROMPT = (
+    "You are a document Q&A assistant. The user's document is available only "
+    "through the search_documents and analyze_ai_content tools - you cannot see "
+    "it otherwise. ALWAYS call search_documents (or analyze_ai_content for AI "
+    "scoring) before answering a question about the document. Answer from the "
+    "retrieved chunks only, cite chunk numbers when relevant, and keep answers "
+    "concise. If a tool returns no relevant chunks, say so."
+)
+
+
 def build_graph(model, context: _Context) -> object:
     """StateGraph agent: model with tools, 5-iteration guard, retry policy."""
 
@@ -167,6 +177,7 @@ def build_graph(model, context: _Context) -> object:
 
     async def agent_node(state: dict):
         messages = state["messages"]
+        prompt = [SystemMessage(content=_SYSTEM_PROMPT), *messages]
         if _tool_call_count(messages) >= _TOOL_LIMIT:
             return {
                 "messages": [
@@ -181,7 +192,7 @@ def build_graph(model, context: _Context) -> object:
             try:
                 collected: list[str] = []
                 tool_calls: list = []
-                async for chunk in model_candidate.astream(messages):
+                async for chunk in model_candidate.astream(prompt):
                     piece = _chunk_text(getattr(chunk, "content", "") or "")
                     if piece:
                         collected.append(piece)
