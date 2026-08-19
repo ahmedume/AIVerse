@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     TEMPERATURE: float = 0.7
     FALLBACK_PROVIDER: str = ""
     FALLBACK_MODEL: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
+    GROQ_MODEL: str = "qwen/qwen3.6-27b"
+    OPENROUTER_MODEL: str = "z-ai/glm-5.2:free"
 
     # Embeddings
     EMBEDDING_PROVIDER: str = "gemini"

@@ -19,7 +19,7 @@ Models are tried in order and automatically fall back when one fails (quota, out
 
 - Set `DEFAULT_PROVIDER`/`DEFAULT_MODEL` for the primary; the rest are used in the fixed order above.
 - Providers without an API key in `backend/.env` are skipped.
-- Groq uses free-tier `llama-3.3-70b-versatile`; OpenRouter uses free `meta-llama/llama-3.3-70b-instruct:free` by default (override via `GROQ_MODEL` / `OPENROUTER_MODEL`).
+- Groq uses free-tier `qwen/qwen3.6-27b`; OpenRouter uses free `z-ai/glm-5.2:free` by default (override via `GROQ_MODEL` / `OPENROUTER_MODEL`).
 - If no provider responds, the chat returns: "We can't process your message right now because you don't have enough credits."
 
 ## Stack

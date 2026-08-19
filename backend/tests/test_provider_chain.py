@@ -10,8 +10,8 @@ from app.core.exceptions import AppError, ProviderNotConfiguredError
 class _FakeSettings:
     FALLBACK_PROVIDER = "zen"
     FALLBACK_MODEL = "deepseek-v4-flash-free"
-    GROQ_MODEL = "llama-3.3-70b-versatile"
-    OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+    GROQ_MODEL = "qwen/qwen3.6-27b"
+    OPENROUTER_MODEL = "z-ai/glm-5.2:free"
     ZEN_API_KEY = "k"
     ZEN_BASE_URL = "http://zen.test"
     GEMINI_API_KEY = "k"
@@ -47,18 +47,18 @@ def test_chain_order_primary_fallback_then_extra(monkeypatch):
 
 def test_chain_skips_unconfigured_groq_and_openrouter(monkeypatch):
     models, fake = _chain(monkeypatch)
-    assert "llama-3.3-70b-versatile" not in models
-    assert "meta-llama/llama-3.3-70b-instruct:free" not in models
+    assert "qwen/qwen3.6-27b" not in models
+    assert "z-ai/glm-5.2:free" not in models
     fake.GROQ_API_KEY = "k"
     models = [_name(m) for m in llm.get_model_chain("gemini", "m1")]
-    assert models == ["m1", "deepseek-v4-flash-free", "llama-3.3-70b-versatile"]
+    assert models == ["m1", "deepseek-v4-flash-free", "qwen/qwen3.6-27b"]
     fake.OPENROUTER_API_KEY = "k"
     models = [_name(m) for m in llm.get_model_chain("gemini", "m1")]
     assert models == [
         "m1",
         "deepseek-v4-flash-free",
-        "llama-3.3-70b-versatile",
-        "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen3.6-27b",
+        "z-ai/glm-5.2:free",
     ]
 
 
@@ -75,7 +75,7 @@ def test_chain_skips_unconfigured_primary(monkeypatch):
     fake.GROQ_API_KEY = "k"
     monkeypatch.setattr(llm, "settings", fake)
     models = [_name(m) for m in llm.get_model_chain("gemini", "m1")]
-    assert models == ["deepseek-v4-flash-free", "llama-3.3-70b-versatile"]
+    assert models == ["deepseek-v4-flash-free", "qwen/qwen3.6-27b"]
 
 
 def test_unknown_provider_raises(monkeypatch):
@@ -89,4 +89,4 @@ def test_get_chat_model_groq_requires_key(monkeypatch):
     fake = _FakeSettings()
     monkeypatch.setattr(llm, "settings", fake)
     with pytest.raises(ProviderNotConfiguredError):
-        llm.get_chat_model("groq", "llama-3.3-70b-versatile")
+        llm.get_chat_model("groq", "qwen/qwen3.6-27b")
