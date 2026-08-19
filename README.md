@@ -5,7 +5,7 @@
 [![FastAPI](https://img.shields.io/badge/backend-FastAPI-teal.svg)](backend/pyproject.toml)
 [![Next.js](https://img.shields.io/badge/frontend-Next.js%2016-black.svg)](frontend/package.json)
 [![Tests](https://img.shields.io/badge/tests-72%20passing-brightgreen.svg)](backend/tests)
-[![License](https://img.shields.io/badge/license-UNLICENSED-grey.svg)](#license)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
 > *AIverse is a self-hosted AI content toolkit for anyone who needs to know whether a document sounds AI-written, whether it matches text already on the web, and how to rewrite it to sound human. It combines per-paragraph AI-likeness scoring with statistical heuristics and an LLM assessment, a best-effort web plagiarism scan, a 1–7 "humanize dial" rewriter with DOCX/PDF export, and a RAG chatbot that answers questions about your documents with cited sources. Everything runs locally on your machine: no accounts, no cloud, no lock-in — your files and a FAISS vector index stay on your disk. It is built with FastAPI, LangGraph, FAISS, and Next.js 16, and works with any of six LLM providers that auto-failover at runtime.*
 
@@ -279,7 +279,7 @@ This is a personal project, but contributions are welcome: open an issue or PR f
 
 ## License
 
-No license file is present — the project is currently **UNLICENSED** (all rights reserved). Contact the author before reuse.
+Licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0) — anyone who modifies and publicly serves this software must release their modified source under the same license. Copyright (C) 2026 Ahmed Umer.
 
 ## TLDR
 
