@@ -237,7 +237,6 @@ AIverse/
 │   │   └── lib/           # api.ts (SSE client), utils
 │   ├── next.config.ts     # standalone output, dev indicators off
 │   └── package.json
-├── sdd/                   # spec-driven docs: SPEC, PRD, SRS, SDS, TECH_STACK, BUILD_PLAN
 ├── imgs/                  # live screenshots (used by this README)
 ├── run-backend.bat        # one-click backend launcher
 ├── run-frontend.bat       # one-click frontend launcher
